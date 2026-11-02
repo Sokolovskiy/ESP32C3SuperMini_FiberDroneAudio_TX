@@ -2,7 +2,17 @@
 
 ESP-IDF v6.1, C. INMP441 → I2S DMA → original STM32 gain/limiter → PCM16 mono → UART1 → optical transmitter. The STM32 RX firmware and packet format are unchanged. No Wi-Fi/Bluetooth services are initialized.
 
-## Get the project or ready-to-flash firmware
+## Download and flash
+
+- [Download ready-to-flash firmware](firmware/FiberDroneAudio_TX_full.bin?raw=true)
+- [Flashing instructions](firmware/README.md) — no source checkout or ESP-IDF installation required.
+- [Download the optional Windows flashing script](firmware/flash.ps1?raw=true)
+
+The combined image contains the bootloader, partition table and microphone application. Flash it at address **0x0**. The same file can be used for multiple compatible ESP32-C3 Super Mini boards.
+
+## Build from source
+
+Open an ESP-IDF v6.1 terminal and clone the repository into a directory of your choice:
 
 ```powershell
 git clone https://github.com/Sokolovskiy/ESP32C3SuperMini_FiberDroneAudio_TX.git
@@ -10,9 +20,9 @@ cd ESP32C3SuperMini_FiberDroneAudio_TX
 idf.py build
 ```
 
-Run these commands in an ESP-IDF v6.1 terminal. The checked-in `sdkconfig` preserves the configuration used for the supplied binary; `sdkconfig.defaults` records the basic target/console defaults. The COM port depends on the connected board.
+The checked-in `sdkconfig` preserves the configuration used for the supplied binary; `sdkconfig.defaults` records the basic target/console defaults. The COM port depends on the connected board.
 
-For flashing identical boards without rebuilding, use [the combined firmware image](firmware/FiberDroneAudio_TX_full.bin) and [batch flashing instructions](firmware/README.md). The combined image includes the bootloader, partition table and microphone application and is written at address **0x0**. The `build` directory and machine-specific VS Code settings are excluded from Git.
+The `build` directory and machine-specific VS Code settings are excluded from Git.
 
 ## Wiring
 
@@ -32,23 +42,17 @@ GPIO10 is a valid ESP32-C3 output and UART1 can be routed through the GPIO matri
 
 The tested Philips I2S master configuration is retained: two 32-bit slots, left channel only, BCLK/WS/DIN 4/5/6, unused MCLK output. The sample rate and DMA block sizing change for RX compatibility and latency. The diagnostic console is explicitly moved from UART0 plus secondary USB to primary USB Serial/JTAG. GPIO10 carries only binary audio packets; ROM boot output also uses separate console signals.
 
-## Build and flash
+## Flash from source
 
-In the ESP-IDF v6.1 PowerShell terminal:
+From the repository root in an ESP-IDF v6.1 PowerShell terminal, enter the port assigned to your board (shown in Windows Device Manager under Ports):
 
 ```powershell
-cd C:\Projects\ESP_FiberDroneAudio_TX
+$port = Read-Host 'ESP32 serial port'
 idf.py build
-idf.py -p COM144 flash monitor
+idf.py -p $port flash monitor
 ```
 
-For an ordinary PowerShell terminal on this machine, initialize the installed environment first:
-
-```powershell
-. 'C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1'
-```
-
-`Ctrl+]` exits the monitor. If Windows assigns a different port after reconnecting USB, replace COM144 with that port. Flash only TX. Hardware has not been flashed or tested as part of this migration.
+Use the ESP-IDF terminal provided by your installation or the ESP-IDF VS Code extension; no particular installation directory is required. `Ctrl+]` exits the monitor. Recheck the port after reconnecting USB. Flash only TX. Validate the audio path on your own hardware using the checklist below.
 
 The application binary is `build/FiberDroneAudio_TX.bin`. Use `idf.py flash` to also program its matching bootloader and partition table; the application binary alone is not a complete blank-chip image.
 
@@ -118,8 +122,8 @@ Run the actual portable C processing/protocol modules on Windows:
 
 ```powershell
 .\tests\run.ps1
-# Or supply your own native C compiler:
-.\tests\run.ps1 -Compiler 'C:\path\to\gcc.exe'
+# GCC must be available on PATH; another compatible compiler can be selected:
+.\tests\run.ps1 -Compiler clang
 ```
 
 The tests check CRC `123456789 → F4`, independent polynomial division, every single-bit error in sequence/payload, 36-byte boundaries, little-endian extremes, 1024 sequence assignments including wrap, ESP32 PCM24 alignment/sign, right-channel rejection, full-scale limiter attack, release to 64x, and 100,000 blocks / 1.6 million samples against original STM32 arithmetic. They do not validate peripheral timing or audio hardware.
@@ -129,7 +133,7 @@ Validation on 2026-11-02: host C tests PASS; `idf.py build` PASS for microphone 
 ## Hardware acceptance checklist
 
 1. Verify the table above, especially L/R grounded, the actual GPIO10 pad, optical module voltage and local common ground. Leave the existing STM32 RX firmware intact.
-2. Build and flash TX only. Open native USB monitor on COM144. Confirm the expected startup configuration, no resets, approximately 16,667 consumed frames/s, and zero error/drop/overflow counters after startup.
+2. Build and flash TX only. Open the native USB monitor on the port assigned to your board. Confirm the expected startup configuration, no resets, approximately 16,667 consumed frames/s, and zero error/drop/overflow counters after startup.
 3. Probe WS/BCLK: approximately 16.6667 kHz / 1.066667 MHz. Speak near the microphone; `peak24` should change. Verify the high 24 bits carry the signed microphone signal if using a logic analyzer.
 4. Enable tone, rebuild and flash TX. Probe GPIO10 and decode 921600 8N1: `A5 5A`, 36-byte frames, advancing sequence, valid CRC, about 1041.67 packets/s. No text should appear in this binary stream. Check it at the optical receiver output as well.
 5. Connect the existing STM32 RX. Listen at a comfortable initial volume for a steady approximately 1 kHz tone. Through its existing debugger, inspect `uartErrorCount`, `crcErrorCount`, `lostPacketCount`, `pcmQueueOverflowCount`, `pcmQueueUnderflowCount` and `dacRebufferCount` where available. Inspect queue occupancy trends; a TX log alone cannot prove RX acceptance.

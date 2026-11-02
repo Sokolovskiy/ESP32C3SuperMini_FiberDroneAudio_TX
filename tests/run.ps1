@@ -1,10 +1,11 @@
-param([string]$Compiler = 'C:\Qt\Tools\mingw1310_64\bin\gcc.exe')
+param([string]$Compiler = 'gcc')
 $ErrorActionPreference = 'Stop'
-$env:PATH = (Split-Path $Compiler -Parent) + ';' + $env:PATH
+$compilerPath = (Get-Command $Compiler -CommandType Application -ErrorAction Stop).Source
+$env:PATH = (Split-Path $compilerPath -Parent) + ';' + $env:PATH
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $output = Join-Path $projectRoot 'build\test_audio.exe'
 New-Item -ItemType Directory -Force (Split-Path $output -Parent) | Out-Null
-& $Compiler -std=c11 -O2 -Wall -Wextra -Werror -I (Join-Path $projectRoot 'main') `
+& $compilerPath -std=c11 -O2 -Wall -Wextra -Werror -I (Join-Path $projectRoot 'main') `
     (Join-Path $PSScriptRoot 'test_audio.c') `
     (Join-Path $projectRoot 'main\audio_processing.c') `
     (Join-Path $projectRoot 'main\audio_protocol.c') -o $output
