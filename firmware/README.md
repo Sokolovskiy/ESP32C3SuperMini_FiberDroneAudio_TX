@@ -10,7 +10,7 @@ Download these files and save them in the same folder of your choice:
 
 On GitHub, use **Download raw file** if clicking a link opens the file preview. You do not need to clone the source repository or install ESP-IDF to flash this image.
 
-The combined image includes the bootloader, partition table and microphone application. Its flash address is **0x0**. Settings: ESP32-C3, DIO, 80 MHz flash, 2 MB configured flash size, microphone enabled, USB diagnostics enabled, zero sample-rate trim. Use boards compatible with these settings. This image contains no board-specific identity or complete flash dump.
+The combined image includes the bootloader, partition table and microphone application. Its flash address is **0x0**. Settings: ESP32-C3, DIO, 80 MHz flash, 2 MB configured flash size, microphone enabled, USB diagnostics enabled, zero sample-rate trim, **audio UART1 GPIO10 at 941176 baud, 8N1**. This audio baud matches the unchanged STM32 RX's nominal 16 MHz / BRR 17 timing and was confirmed with clean tone and microphone tests. The tool's 460800 flashing baud is a separate setting. Use boards compatible with these settings. This image contains no board-specific identity or complete flash dump.
 
 ## Flash with Python and esptool
 

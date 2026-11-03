@@ -75,8 +75,8 @@ The supplied RX `SystemClock_Config` selects HSI, no PLL, AHB/APB1 divide by 1. 
 Fs_RX = 16,000,000 / (8 × 120) = 16,666.6666667 samples/s
 packet interval = 16 / Fs_RX = 960 us
 BCLK = 64 × Fs = 1,066,666.6667 Hz
-UART traffic = 36 × 10 × Fs / 16 = 375,000 bit/s (40.69% of 921600)
-one packet on UART = 390.625 us
+UART traffic = 36 × 10 × Fs / 16 = 375,000 bit/s (39.84% of 941176)
+one packet on UART ≈ 382.500 us
 ```
 
 The ESP32-C3 default I2S source in the installed IDF is PLL_F160M. After standard initialization, `i2s_channel_tune_rate` sets MCLK to the nearest representable value of `Fs_RX × 256 × (1 + trim/1e6)`, before enabling capture. At zero trim the divider is 37 + 1/2, so the nominal rate can match RX exactly. An integer `sample_rate_hz=16667` alone is not the frequency guarantee.
@@ -96,7 +96,9 @@ There is no reverse telemetry in the supplied optical link. A TX-only automatic 
 
 The supplied old TX main file does not contain its SAI peripheral clock selection (`HAL_SAI_MspInit`/RCCEx configuration). Its exact physical sample rate cannot be established from that file alone; RX timing is sufficient to choose the new target rate. The old test-tone table contains only zeroes, so the new real 1 kHz generator deliberately replaces that inactive placeholder.
 
-The subsequently supplied RX `stm32g4xx_hal_msp.c` confirms `RCC_USART2CLKSOURCE_PCLK1`. Combined with the supplied RX main file, this gives a nominal 16 MHz USART2 clock. Oversampling 16 and prescaler 1 yield BRR=17, hence a nominal hardware receive baud of 16,000,000/17 = 941,176.47 despite the configured 921600. This is calculated using the [ST HAL divider formula](https://github.com/STMicroelectronics/stm32g4xx-hal-driver/blob/master/Inc/stm32g4xx_hal_uart.h); physical baud still follows the actual HSI frequency. ESP32 TX at 921600 is nominally 2.08% slower than that receiver baud. New TX stays configured at 921600 as required; verify framing/noise/CRC errors on RX under real clock and temperature variation. A debugger reading of USART2 BRR can confirm the running firmware. No baud change is made silently.
+The RX `stm32g4xx_hal_msp.c` confirms `RCC_USART2CLKSOURCE_PCLK1`. Combined with the supplied RX main file, this gives a nominal 16 MHz USART2 clock. Oversampling 16 and prescaler 1 yield BRR=17, hence a nominal hardware receive baud of 16,000,000/17 = 941,176.47 despite the old STM32 source setting of 921600. This is calculated using the [ST HAL divider formula](https://github.com/STMicroelectronics/stm32g4xx-hal-driver/blob/master/Inc/stm32g4xx_hal_uart.h); physical baud still follows the actual HSI frequency.
+
+**ESP32 TX now defaults to 941176 baud.** At 921600, both live microphone audio and a generated 1 kHz tone were strongly distorted on the existing RX. With only the audio UART setting changed to 941176, the user confirmed a clean tone and working microphone audio on 2026-11-03. This intentionally replaces the original nominal 921600 requirement to match the unchanged receiver's effective timing. UART remains 8N1 and the 36-byte packet format, sequence, CRC and PCM encoding are unchanged. The ESP32 selects its nearest representable baud. Check RX errors and long-term operation on each hardware setup; independent sample-clock drift remains a separate issue.
 
 The RX MSP file also reveals a wiring discrepancy with the original task: USART2 RX is configured on **PA15 / AF7**, not PA3. USART2 TX is PA2; DAC output is PA4. UART RX DMA uses DMA1_Channel1, byte alignment, peripheral-to-memory, circular mode; DAC DMA uses DMA1_Channel3 in circular mode. If this MSP file matches the flashed RX firmware, connect the optical receiver's UART output to PA15. Verify the actual board wiring/firmware version before moving a connection, particularly if reception already works on PA3.
 
@@ -110,7 +112,7 @@ Illustrative output (not an actual hardware measurement):
 
 ```text
 I (...) audio_tx: I2S Philips 32-bit stereo, left mono; clock estimate 16666.664063 Hz, trim +0 ppm
-I (...) audio_tx: UART1 TX GPIO10: 921600 8N1, 36 bytes/16 samples; tone=0
+I (...) audio_tx: UART1 TX GPIO10: 941176 8N1, 36 bytes/16 samples; tone=0
 I (...) audio_tx: rate=16666.40 samples/s peak24=12000 gain=64.000x sent=5208 drop=0 i2s_err=0 uart_err=0 dma_ovf=0 queue_ovf=0 limiter=0 clips=0
 ```
 
@@ -128,14 +130,14 @@ Run the actual portable C processing/protocol modules on Windows:
 
 The tests check CRC `123456789 → F4`, independent polynomial division, every single-bit error in sequence/payload, 36-byte boundaries, little-endian extremes, 1024 sequence assignments including wrap, ESP32 PCM24 alignment/sign, right-channel rejection, full-scale limiter attack, release to 64x, and 100,000 blocks / 1.6 million samples against original STM32 arithmetic. They do not validate peripheral timing or audio hardware.
 
-Validation on 2026-11-02: host C tests PASS; `idf.py build` PASS for microphone with diagnostics and for 1 kHz tone with periodic diagnostics disabled. The final source configuration and binary are microphone mode with diagnostics enabled. Application size: 0x317C0 (202,688 bytes), fitting the 1 MiB application partition with 81% free. Build logs: `build/microphone-build.log` and `build/tone-build.log`. ESP-IDF's full initial configuration reported upstream Kconfig/component-validation notices; the final incremental builds reported no C compiler warnings or errors in these modules. No physical flash or audio test was performed.
+Validation on 2026-11-02: host C tests PASS; `idf.py build` PASS for microphone with diagnostics and for 1 kHz tone with periodic diagnostics disabled. The final source configuration and binary are microphone mode with diagnostics enabled. Application size: 0x317C0 (202,688 bytes), fitting the 1 MiB application partition with 81% free. Build logs: `build/microphone-build.log` and `build/tone-build.log`. ESP-IDF's full initial configuration reported upstream Kconfig/component-validation notices; the final incremental builds reported no C compiler warnings or errors in these modules. These initial checks did not include physical audio testing. On 2026-11-03, the user confirmed a clean 1 kHz tone and working microphone audio with UART set to 941176. The production build with that setting passed `idf.py build` and the host C tests; its combined binary is byte-for-byte identical to the microphone diagnostic image tested by the user. The updated build log is `build/microphone-uart941176-build.log` (local build output). Long-term drift testing remains a separate hardware check.
 
 ## Hardware acceptance checklist
 
 1. Verify the table above, especially L/R grounded, the actual GPIO10 pad, optical module voltage and local common ground. Leave the existing STM32 RX firmware intact.
 2. Build and flash TX only. Open the native USB monitor on the port assigned to your board. Confirm the expected startup configuration, no resets, approximately 16,667 consumed frames/s, and zero error/drop/overflow counters after startup.
 3. Probe WS/BCLK: approximately 16.6667 kHz / 1.066667 MHz. Speak near the microphone; `peak24` should change. Verify the high 24 bits carry the signed microphone signal if using a logic analyzer.
-4. Enable tone, rebuild and flash TX. Probe GPIO10 and decode 921600 8N1: `A5 5A`, 36-byte frames, advancing sequence, valid CRC, about 1041.67 packets/s. No text should appear in this binary stream. Check it at the optical receiver output as well.
+4. Enable tone, rebuild and flash TX. Probe GPIO10 and decode 941176 8N1: `A5 5A`, 36-byte frames, advancing sequence, valid CRC, about 1041.67 packets/s. No text should appear in this binary stream. Check it at the optical receiver output as well.
 5. Connect the existing STM32 RX. Listen at a comfortable initial volume for a steady approximately 1 kHz tone. Through its existing debugger, inspect `uartErrorCount`, `crcErrorCount`, `lostPacketCount`, `pcmQueueOverflowCount`, `pcmQueueUnderflowCount` and `dacRebufferCount` where available. Inspect queue occupancy trends; a TX log alone cannot prove RX acceptance.
 6. Restore `AUDIO_TEST_TONE=0`, rebuild/flash TX and check intelligible speech, quiet input, normal voice and loud transients. Gain should reduce immediately on a large block peak and recover gradually; clips should stay zero. The conservative ±4096 ceiling matches the old sound level.
 7. Run at least 30–60 minutes. Record RX underflow/overflow/rebuffer counters and queue occupancy at intervals, plus TX diagnostics. Check temperature variation. Calibrate TX trim if occupancy systematically drifts.

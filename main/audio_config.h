@@ -30,7 +30,9 @@
 #define AUDIO_I2S_WS_GPIO 5
 #define AUDIO_I2S_DIN_GPIO 6
 #define AUDIO_UART_TX_GPIO 10
-#define AUDIO_UART_BAUD 921600
+/* Match the unchanged STM32 RX: nominal 16 MHz / BRR 17.
+ * Confirmed with a clean 1 kHz tone and intelligible microphone audio. */
+#define AUDIO_UART_BAUD 941176
 #define AUDIO_MCLK_MULTIPLE 256U
 
 _Static_assert(VOLUME_PERCENT <= 100U, "Volume must be 0..100");
